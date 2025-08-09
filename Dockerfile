@@ -127,7 +127,7 @@ wal_compression = on
 vacuum_buffer_usage_limit = 256kB
 io_combine_limit = 128kB
 summarize_wal = on
-wal_summarize_keep_time = '10min'   # optional
+wal_summarize_keep_time = '10min'
 
 # Extension Loading
 shared_preload_libraries = 'pg_stat_statements,pg_cron,pgaudit,pg_stat_kcache,pg_qualstats,pg_wait_sampling,timescaledb'
