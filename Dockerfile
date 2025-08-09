@@ -52,7 +52,9 @@ RUN git clone https://github.com/postgrespro/pg_wait_sampling.git --depth 1 \
 # Final production stage
 FROM base AS production
 
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+    OPENSSL_ia32cap=0 \
+    PGDATA=/var/lib/postgresql/data/pgdata
 
 # Install necessary tools (no recommends so ca-certificates isn't pulled)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -84,8 +86,8 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /usr/lib/postgresql/17/lib/*.so /usr/lib/postgresql/17/lib/
 COPY --from=builder /usr/share/postgresql/17/extension/* /usr/share/postgresql/17/extension/
 
-# Create necessary directories maintaining compatibility
-RUN mkdir -p /var/lib/postgresql/data/wal_archive \
+# Create runtime dirs (keep PGDATA empty)
+RUN mkdir -p /var/lib/postgresql/wal_archive \
     && mkdir -p /docker-entrypoint-initdb.d \
     && mkdir -p /usr/share/postgresql/17 \
     && chown -R postgres:postgres /var/lib/postgresql
@@ -118,7 +120,7 @@ max_wal_senders = 5
 max_replication_slots = 5
 wal_keep_size = 1GB
 archive_mode = on
-archive_command = 'test ! -f /var/lib/postgresql/data/wal_archive/%f && cp %p /var/lib/postgresql/data/wal_archive/%f'
+archive_command = 'test ! -f /var/lib/postgresql/wal_archive/%f && cp %p /var/lib/postgresql/wal_archive/%f'
 wal_compression = on
 
 # PostgreSQL 17 specific optimizations
