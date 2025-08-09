@@ -93,7 +93,8 @@ RUN mkdir -p /var/lib/postgresql/wal_archive \
     && chown -R postgres:postgres /var/lib/postgresql
 
 # PostgreSQL configuration for financial workloads
-RUN cat > /usr/local/share/postgresql/postgresql.conf.sample <<EOF
+RUN mkdir -p /usr/local/share/postgresql \
+    && cat > /usr/local/share/postgresql/postgresql.conf.sample <<EOF
 # PostgreSQL 17 Configuration for Financial Reconciliation and Search
 
 # Connection Settings
