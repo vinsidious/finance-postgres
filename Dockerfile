@@ -93,7 +93,7 @@ RUN mkdir -p /var/lib/postgresql/wal_archive \
     && chown -R postgres:postgres /var/lib/postgresql
 
 # PostgreSQL configuration for financial workloads
-RUN cat > /usr/share/postgresql/postgresql.conf.sample <<EOF
+RUN cat > /usr/local/share/postgresql/postgresql.conf.sample <<EOF
 # PostgreSQL 17 Configuration for Financial Reconciliation and Search
 
 # Connection Settings
@@ -126,7 +126,8 @@ wal_compression = on
 # PostgreSQL 17 specific optimizations
 vacuum_buffer_usage_limit = 256kB
 io_combine_limit = 128kB
-wal_summarizer = on
+summarize_wal = on
+wal_summarize_keep_time = '10min'   # optional
 
 # Extension Loading
 shared_preload_libraries = 'pg_stat_statements,pg_cron,pgaudit,pg_stat_kcache,pg_qualstats,pg_wait_sampling,timescaledb'
