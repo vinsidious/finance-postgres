@@ -221,20 +221,41 @@ fi
 
 mkdir -p "$PGDATA/conf.d"
 
-cat > "$PGDATA/conf.d/10-financial.conf" <<'EOC'
-# Image-provided configuration (applied at first init)
-shared_preload_libraries = 'pg_stat_statements,pg_cron,pgaudit,pg_stat_kcache,pg_qualstats,pg_wait_sampling,timescaledb'
-archive_mode = on
-archive_command = 'test ! -f $PGDATA/wal_archive/%f && cp %p $PGDATA/wal_archive/%f'
-wal_level = replica
-wal_compression = lz4
-summarize_wal = on
-EOC
+# Determine which database should host pg_cron; default to POSTGRES_DB or 'postgres'
+CRON_DB="${POSTGRES_DB:-postgres}"
+
+{
+  printf "# Image-provided configuration (applied at first init)\n"
+  printf "shared_preload_libraries = 'pg_stat_statements,pg_cron,pgaudit,pg_stat_kcache,pg_qualstats,pg_wait_sampling,timescaledb'\n"
+  printf "cron.database_name = '%s'\n" "$CRON_DB"
+  printf "cron.timezone = 'UTC'\n"
+  printf "archive_mode = on\n"
+  printf "archive_command = 'test ! -f \\${PGDATA}/wal_archive/%%f && cp %%p \\${PGDATA}/wal_archive/%%f'\n"
+  printf "wal_level = replica\n"
+  printf "wal_compression = lz4\n"
+  printf "summarize_wal = on\n"
+} > "$PGDATA/conf.d/10-financial.conf"
 
 # Restart to pick up shared_preload_libraries before SQL init scripts run
 pg_ctl -D "$PGDATA" -m fast restart
 EOF
 RUN chmod +x /docker-entrypoint-initdb.d/00-configure-postgresql.sh
+
+# Create pg_cron extension in the configured cron.database_name (defaults to 'postgres')
+RUN cat > /docker-entrypoint-initdb.d/00b-create-pg-cron.sh <<'EOF'
+#!/bin/sh
+set -e
+
+# Determine the database where pg_cron should live
+CRON_DB=$(psql -v ON_ERROR_STOP=1 -XAtq -d postgres -c "SHOW cron.database_name;" | tr -d '[:space:]')
+if [ -z "$CRON_DB" ]; then
+  CRON_DB="postgres"
+fi
+
+# Create the extension in that database only
+psql -v ON_ERROR_STOP=1 -X -d "$CRON_DB" -c "CREATE EXTENSION IF NOT EXISTS pg_cron;"
+EOF
+RUN chmod +x /docker-entrypoint-initdb.d/00b-create-pg-cron.sh
 
 # Create initialization script for extensions
 RUN cat > /docker-entrypoint-initdb.d/01-extensions.sql <<'EOF'
