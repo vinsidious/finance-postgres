@@ -201,6 +201,41 @@ RUN printf '%s\n' '#!/bin/sh' \
   > /docker-entrypoint-initdb.d/00-create-wal-archive.sh \
   && chmod +x /docker-entrypoint-initdb.d/00-create-wal-archive.sh
 
+# Configure Postgres on first init: enable include_dir and preload libraries, set core WAL options, and restart
+RUN cat > /docker-entrypoint-initdb.d/00-configure-postgresql.sh <<'EOF'
+#!/bin/sh
+set -e
+
+# Ensure WAL archive directory exists before enabling archive_command
+mkdir -p "$PGDATA/wal_archive"
+chown -R postgres:postgres "$PGDATA/wal_archive"
+
+CONF="$PGDATA/postgresql.conf"
+
+# Enable include_dir 'conf.d' so we can drop a managed config file
+if ! grep -qE "^[[:space:]]*include_dir[[:space:]]*=" "$CONF"; then
+  printf "\ninclude_dir = 'conf.d'\n" >> "$CONF"
+else
+  sed -i "s/^#\s*include_dir\s*=.*/include_dir = 'conf.d'/" "$CONF" || true
+fi
+
+mkdir -p "$PGDATA/conf.d"
+
+cat > "$PGDATA/conf.d/10-financial.conf" <<'EOC'
+# Image-provided configuration (applied at first init)
+shared_preload_libraries = 'pg_stat_statements,pg_cron,pgaudit,pg_stat_kcache,pg_qualstats,pg_wait_sampling,timescaledb'
+archive_mode = on
+archive_command = 'test ! -f $PGDATA/wal_archive/%f && cp %p $PGDATA/wal_archive/%f'
+wal_level = replica
+wal_compression = lz4
+summarize_wal = on
+EOC
+
+# Restart to pick up shared_preload_libraries before SQL init scripts run
+pg_ctl -D "$PGDATA" -m fast restart
+EOF
+RUN chmod +x /docker-entrypoint-initdb.d/00-configure-postgresql.sh
+
 # Create initialization script for extensions
 RUN cat > /docker-entrypoint-initdb.d/01-extensions.sql <<'EOF'
 -- Core Extensions
