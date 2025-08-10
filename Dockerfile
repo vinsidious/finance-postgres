@@ -53,8 +53,7 @@ RUN git clone https://github.com/postgrespro/pg_wait_sampling.git --depth 1 \
 FROM base AS production
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    OPENSSL_ia32cap=0 \
-    PGDATA=/var/lib/postgresql/data/pgdata
+    OPENSSL_ia32cap=0
 
 # Install necessary tools (no recommends so ca-certificates isn't pulled)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -86,9 +85,8 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /usr/lib/postgresql/17/lib/*.so /usr/lib/postgresql/17/lib/
 COPY --from=builder /usr/share/postgresql/17/extension/* /usr/share/postgresql/17/extension/
 
-# Create runtime dirs (keep PGDATA empty)
-RUN mkdir -p /var/lib/postgresql/wal_archive \
-    && mkdir -p /docker-entrypoint-initdb.d \
+# Create runtime dirs (keep PGDATA empty; archive dir created at runtime)
+RUN mkdir -p /docker-entrypoint-initdb.d \
     && mkdir -p /usr/share/postgresql/17 \
     && chown -R postgres:postgres /var/lib/postgresql
 
@@ -121,14 +119,13 @@ max_wal_senders = 5
 max_replication_slots = 5
 wal_keep_size = 1GB
 archive_mode = on
-archive_command = 'test ! -f /var/lib/postgresql/wal_archive/%f && cp %p /var/lib/postgresql/wal_archive/%f'
-wal_compression = on
+archive_command = 'test ! -f $PGDATA/wal_archive/%f && cp %p $PGDATA/wal_archive/%f'
+wal_compression = lz4
 
 # PostgreSQL 17 specific optimizations
 vacuum_buffer_usage_limit = 256kB
 io_combine_limit = 128kB
 summarize_wal = on
-wal_summarize_keep_time = '10min'
 
 # Extension Loading
 shared_preload_libraries = 'pg_stat_statements,pg_cron,pgaudit,pg_stat_kcache,pg_qualstats,pg_wait_sampling,timescaledb'
@@ -195,6 +192,14 @@ lc_numeric = 'en_US.utf8'
 lc_time = 'en_US.utf8'
 default_text_search_config = 'pg_catalog.english'
 EOF
+
+# Ensure WAL archive directory exists at runtime (before SQL init scripts)
+RUN printf '%s\n' '#!/bin/sh' \
+  'set -e' \
+  'mkdir -p "$PGDATA/wal_archive"' \
+  'chown -R postgres:postgres "$PGDATA/wal_archive"' \
+  > /docker-entrypoint-initdb.d/00-create-wal-archive.sh \
+  && chmod +x /docker-entrypoint-initdb.d/00-create-wal-archive.sh
 
 # Create initialization script for extensions
 RUN cat > /docker-entrypoint-initdb.d/01-extensions.sql <<'EOF'

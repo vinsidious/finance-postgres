@@ -178,7 +178,7 @@ Pre-configured maintenance jobs via pg_cron:
 ### Financial Workload Optimizations
 
 - **Checkpoint tuning** - 90% completion target for write smoothing
-- **WAL compression** - Reduced storage for transaction logs
+- **WAL compression (lz4)** - Reduced storage for transaction logs
 - **Parallel query** - Optimized for analytical queries
 - **Statistics target** - Higher default (100) for better query plans
 
@@ -236,14 +236,25 @@ pgAudit is configured to log:
 WAL archiving is enabled by default:
 
 ```bash
-# Backup location
-/var/lib/postgresql/data/wal_archive/
+# Backup location (created at runtime via init script)
+$PGDATA/wal_archive/
 
 # Manual backup
 docker exec postgres-financial pg_basebackup \
   -D /backups/$(date +%Y%m%d) \
   -Ft -z -P
 ```
+
+## Dokploy usage
+
+This image is designed to be a drop-in for Dokploy database services:
+
+- Use custom image: `vinsidious/finance-postgres:17`
+- Mount volume path to match PGDATA (default `/var/lib/postgresql/data`)
+- Do not set `PGDATA` unless you intentionally want a subdirectory; if you do, ensure the volume mount matches and that the archive path points to `$PGDATA/wal_archive`.
+- On an existing volume, remember the sample configuration only applies on first init; change live settings via `ALTER SYSTEM` or start with a fresh volume.
+
+For Dokploy’s internal Postgres, it’s generally best to keep their official image.
 
 ### Point-in-Time Recovery
 
